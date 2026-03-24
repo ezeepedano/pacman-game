@@ -47,9 +47,20 @@ function updateAndDrawParticles(ctx) {
     }
 }
 
+function shakeScreen() {
+    const container = document.getElementById('game-container');
+    if (container) {
+        container.classList.remove('shake');
+        void container.offsetWidth; // trigger reflow
+        container.classList.add('shake');
+        setTimeout(() => container.classList.remove('shake'), 200);
+    }
+}
+
 function explode(x, y, color) {
-    for (let i = 0; i < 30; i++) {
-        createParticle(x, y, color, 3, 4);
-        createParticle(x, y, '#ffffff', 2, 5); // White core flash
+    shakeScreen();
+    for (let i = 0; i < 40; i++) {
+        createParticle(x, y, color, 4, 6);
+        createParticle(x, y, '#ffffff', 3, 7); // White core flash
     }
 }

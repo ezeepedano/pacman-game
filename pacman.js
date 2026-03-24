@@ -163,9 +163,9 @@ class Pacman {
         }
 
         // Animation
-        if (this.vx !== 0 || this.vy !== 0) {
+        if (this.isMovingToTarget || this.vx !== 0 || this.vy !== 0) {
             this.frameCount++;
-            if (this.frameCount > 5) {
+            if (this.frameCount > 4) { // Faster mouth animation
                 this.frame = (this.frame + 1) % 3;
                 this.frameCount = 0;
             }

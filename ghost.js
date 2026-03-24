@@ -232,16 +232,23 @@ class Ghost {
                     const isDoor = this.map.isGhostDoor(nextCol, nextRow);
 
                     let canMove = false;
-                    if (!isWall) {
+
+                    // Cyber-Wraith mode: They don't respect walls, they phase right through them.
+                    // But they still can't enter the ghost door unless eaten to avoid getting stuck inside.
+                    if (this.mode === 'eaten') {
+                         canMove = (!isWall && !isDoor) || isDoor;
+                    } else {
+                         // Intelligent & Relentless: Ignore walls entirely to chase the player
                          if (!isDoor) canMove = true;
-                         else if (this.mode === 'eaten') canMove = true;
                     }
 
                     if (canMove) {
                         if (this.mode === 'scared') {
+                            // When scared, try to move away or randomly, but they still phase through walls
                             bestDir = dir;
                             if (Math.random() > 0.5) break;
                         } else {
+                            // True pathfinding distance ignoring walls entirely
                             const dist = Math.sqrt(Math.pow(nextCol - target.x, 2) + Math.pow(nextRow - target.y, 2));
                             if (dist < bestDist) {
                                 bestDist = dist;
@@ -323,10 +330,16 @@ class Ghost {
              ctx.fillRect(-TILE_SIZE/2, -TILE_SIZE/2, TILE_SIZE, TILE_SIZE);
         }
 
+        // Check if wall-phasing
+        const currentCol = Math.floor(this.x / TILE_SIZE);
+        const currentRow = Math.floor(this.y / TILE_SIZE);
+        const isPhasing = this.mode !== 'eaten' && this.map.isWall(currentCol, currentRow);
+
         // Cyber Body (Neon Fill & Stroke)
         ctx.shadowBlur = 15;
         ctx.shadowColor = currentColor;
         ctx.fillStyle = currentColor;
+        ctx.globalAlpha = isPhasing ? 0.4 : 1.0; // Phase effect
 
         ctx.beginPath();
         ctx.arc(0, 0, radius, Math.PI, 0);
