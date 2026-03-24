@@ -3,26 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pacman Game</title>
+    <title>CYBER-PAC 2142</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="game-container">
         <div id="ui-top">
-            <div id="score-box">SCORE: <span id="score">0</span></div>
-            <div id="level-box">LEVEL: <span id="level">1</span></div>
+            <div id="score-box" class="neon-text-blue">SCORE: <span id="score">0</span></div>
+            <div id="level-box" class="neon-text-green">SECTOR: <span id="level">1</span></div>
         </div>
         <canvas id="gameCanvas" width="560" height="620"></canvas>
         <div id="ui-bottom">
-            <div id="lives-box">LIVES: <span id="lives">3</span></div>
+            <div id="lives-box" class="neon-text-pink">SYSTEM INTEGRITY: <span id="lives">███</span></div>
+            <div id="energy-box" class="neon-text-yellow">WEAPON: <span id="energy">100%</span> (SPACE)</div>
         </div>
         <div id="message-overlay" class="hidden">
-            <h1 id="message-text">GAME OVER</h1>
-            <p id="sub-message-text">Press ENTER to restart</p>
+            <h1 id="message-text" class="neon-text-red">SYSTEM FAILURE</h1>
+            <p id="sub-message-text" class="neon-text-blue">INITIATE REBOOT [ENTER]</p>
         </div>
     </div>
 
     <!-- Scripts -->
+    <script src="particles.js"></script>
     <script src="map.js"></script>
     <script src="pacman.js"></script>
     <script src="ghost.js"></script>

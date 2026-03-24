@@ -28,49 +28,55 @@ class Ghost {
         this.startX = START_POSITIONS[id].x * TILE_SIZE;
         this.startY = START_POSITIONS[id].y * TILE_SIZE;
 
+        // Target Based Movement to fix grid alignment bugs
         this.x = this.startX;
         this.y = this.startY;
-        this.vx = (id === 0) ? -1 : 0;
-        this.vy = (id === 0) ? 0 : -1; // Initial movement
+        this.targetX = this.x;
+        this.targetY = this.y;
+        this.isMovingToTarget = false;
 
-        // Base Speed and multipliers
-        this.baseSpeed = 1.5;
+        this.vx = (id === 0) ? -1 : 0;
+        this.vy = (id === 0) ? 0 : -1;
+
+        this.baseSpeed = 1.0; // Needs to divide evenly into TILE_SIZE (20)
         this.speed = this.baseSpeed;
 
-        // State management
-        this.mode = 'scatter'; // scatter, chase, scared, eaten, freeze
+        // State
+        this.mode = 'scatter';
         this.modeTimer = 0;
         this.scaredTimer = 0;
         this.freezeTimer = 0;
 
-        // Level Difficulty scaling
         this.level = 1;
         this.chaseDuration = 1000;
         this.scatterDuration = 400;
-        this.speedIncrease = 0;
 
-        // Visuals
         this.wobble = 0;
         this.wobbleSpeed = 0.2;
     }
 
     setLevelDifficulty(level) {
         this.level = level;
+        // Cyber-Speed increase
+        let speedMult = 1.0 + (level * 0.2); // Base + 20% per level
+        this.baseSpeed = 1.0 * speedMult;
+        // Cap speed so it divides into 20 evenly (1, 1.25, 2, 2.5, 4, 5)
+        if (this.baseSpeed > 1 && this.baseSpeed < 1.25) this.baseSpeed = 1.25;
+        if (this.baseSpeed > 1.25 && this.baseSpeed < 2) this.baseSpeed = 2.0;
+        if (this.baseSpeed > 2 && this.baseSpeed < 2.5) this.baseSpeed = 2.5;
 
-        // Difficulty scaling logic
-        // Ghosts get faster and spend more time chasing as levels increase
-        this.speedIncrease = (level - 1) * 0.15; // +10% speed per level
-        this.baseSpeed = 1.5 + this.speedIncrease;
-
-        this.chaseDuration = 1000 + (level * 200); // Chase longer
-        this.scatterDuration = Math.max(100, 400 - (level * 50)); // Scatter less
-
+        this.chaseDuration = 1000 + (level * 300); // Chase longer
+        this.scatterDuration = Math.max(50, 400 - (level * 80)); // Scatter less
         this.speed = this.baseSpeed;
     }
 
     reset() {
         this.x = this.startX;
         this.y = this.startY;
+        this.targetX = this.x;
+        this.targetY = this.y;
+        this.isMovingToTarget = false;
+
         this.vx = (this.id === 0) ? -1 : 0;
         this.vy = (this.id === 0) ? 0 : -1;
 
@@ -84,25 +90,32 @@ class Ghost {
     setScared() {
         if (this.mode !== 'eaten') {
             this.mode = 'scared';
-            this.scaredTimer = 300 - (this.level * 20); // Less scared time on higher levels
-            this.vx *= -1; // Reverse direction when scared
-            this.vy *= -1;
+            this.scaredTimer = 300 - (this.level * 15);
+            // Reversing logic handled when reaching next tile center
             this.speed = this.baseSpeed * 0.5; // Slow down
         }
     }
 
     setEaten() {
         this.mode = 'eaten';
-        this.speed = this.baseSpeed * 2; // Move fast to ghost house
+        this.speed = this.baseSpeed * 4; // Move ultra fast to ghost house
+        // Snap to grid to prevent collision desync
+        this.targetX = Math.round(this.x / TILE_SIZE) * TILE_SIZE;
+        this.targetY = Math.round(this.y / TILE_SIZE) * TILE_SIZE;
+        explode(this.x + TILE_SIZE/2, this.y + TILE_SIZE/2, this.color); // Death explosion
     }
 
     setFrozen() {
         this.mode = 'freeze';
-        this.freezeTimer = 240; // 4 seconds at 60fps
-        this.speed = 0; // Stop completely
+        this.freezeTimer = 300; // 5 seconds
+        this.speed = 0;
     }
 
     getTarget() {
+        if (this.mode === 'eaten') {
+            return {x: 13, y: 11}; // Ghost House
+        }
+
         if (this.mode === 'scatter') {
             return SCATTER_TARGETS[this.id];
         }
@@ -111,70 +124,46 @@ class Ghost {
             const pacCol = Math.floor(this.pacman.x / TILE_SIZE);
             const pacRow = Math.floor(this.pacman.y / TILE_SIZE);
 
-            // Blinky (Red): Direct chase
-            if (this.id === 0) {
+            if (this.id === 0) { // Blinky - Perfect Tracking
                 return {x: pacCol, y: pacRow};
             }
-
-            // Pinky (Pink): Ambush (4 tiles ahead of Pacman)
-            if (this.id === 1) {
+            if (this.id === 1) { // Pinky - Ambush
                 let targetX = pacCol;
                 let targetY = pacRow;
-
                 if (this.pacman.direction === 0) targetX += 4;
                 else if (this.pacman.direction === 1) targetY += 4;
                 else if (this.pacman.direction === 2) targetX -= 4;
                 else if (this.pacman.direction === 3) targetY -= 4;
-
                 return {x: targetX, y: targetY};
             }
-
-            // Inky (Cyan): Flank (Vector between Blinky and 2 tiles ahead of Pacman)
-            if (this.id === 2) {
-                 // Simplified flanking: Just slightly offset from Pacman based on his direction
+            if (this.id === 2) { // Inky - Flank
                  let targetX = pacCol;
                  let targetY = pacRow;
-
                  if (this.pacman.direction === 0) targetX -= 2;
                  else if (this.pacman.direction === 1) targetY -= 2;
                  else if (this.pacman.direction === 2) targetX += 2;
                  else if (this.pacman.direction === 3) targetY += 2;
-
                  return {x: targetX, y: targetY};
             }
-
-            // Clyde (Orange): Flee if too close, otherwise scatter
-            if (this.id === 3) {
-                const distToPacman = Math.abs(this.x/TILE_SIZE - pacCol) + Math.abs(this.y/TILE_SIZE - pacRow);
-                // Brave factor increases with level
-                const fleeDistance = Math.max(2, 8 - (this.level - 1));
-
-                if (distToPacman < fleeDistance) {
-                    return SCATTER_TARGETS[3]; // Flee to corner
-                } else {
-                    return {x: pacCol, y: pacRow}; // Chase
-                }
+            if (this.id === 3) { // Clyde - Flee if close
+                const dist = Math.abs(this.x/TILE_SIZE - pacCol) + Math.abs(this.y/TILE_SIZE - pacRow);
+                const fleeDist = Math.max(2, 8 - (this.level - 1));
+                if (dist < fleeDist) return SCATTER_TARGETS[3];
+                return {x: pacCol, y: pacRow};
             }
         }
-
-        // Default or Eaten target (Ghost House)
-        if (this.mode === 'eaten') {
-            return {x: 13, y: 11}; // Ghost House entrance
-        }
-
-        // Scared mode target is random, handled in logic
         return {x: Math.floor(Math.random() * MAP_WIDTH), y: Math.floor(Math.random() * MAP_HEIGHT)};
     }
 
     update() {
-        // Handle Timers and State Transitions
+        // Timers
         if (this.mode === 'freeze') {
             this.freezeTimer--;
             if (this.freezeTimer <= 0) {
-                this.mode = 'scatter'; // Revert back safely
+                this.mode = 'scatter';
                 this.speed = this.baseSpeed;
             } else {
-                return; // Do not move
+                return;
             }
         }
 
@@ -198,94 +187,106 @@ class Ghost {
             }
         }
 
-        // Movement Logic (Intersection Decision Making)
-        // Ghosts only make decisions when perfectly aligned with the grid
-        const isAligned = (this.x % TILE_SIZE === 0 && this.y % TILE_SIZE === 0);
+        // --- Target-Based Grid Movement Engine ---
+        if (this.x === this.targetX && this.y === this.targetY) {
+            this.isMovingToTarget = false;
+        }
 
-        if (isAligned) {
+        if (!this.isMovingToTarget) {
             const currentCol = Math.floor(this.x / TILE_SIZE);
             const currentRow = Math.floor(this.y / TILE_SIZE);
 
-            // Eaten logic: Check if reached ghost house
+            // House Exit Logic
             if (this.mode === 'eaten' && Math.abs(currentCol - 13) <= 1 && Math.abs(currentRow - 11) <= 1) {
                 this.mode = 'scatter';
                 this.speed = this.baseSpeed;
             }
+            if (currentRow >= 13 && currentRow <= 15 && this.mode !== 'eaten') {
+                // Force exit
+                this.targetX = 13.5 * TILE_SIZE;
+                this.targetY = 11 * TILE_SIZE;
+                this.isMovingToTarget = true;
+                // Pre-calculate velocities
+                this.vx = Math.sign(this.targetX - this.x);
+                this.vy = Math.sign(this.targetY - this.y);
+            } else {
+                // Normal intersection logic
+                const target = this.getTarget();
+                const directions = [
+                    {dx: 0, dy: -1}, {dx: -1, dy: 0}, {dx: 0, dy: 1}, {dx: 1, dy: 0}
+                ];
 
-            // Get target tile
-            const target = this.getTarget();
+                let bestDist = Infinity;
+                let bestDir = null;
 
-            // Possible directions
-            const directions = [
-                {dx: 0, dy: -1}, // Up
-                {dx: -1, dy: 0}, // Left
-                {dx: 0, dy: 1},  // Down
-                {dx: 1, dy: 0}   // Right
-            ];
+                const reverseVx = -this.vx;
+                const reverseVy = -this.vy;
 
-            let bestDist = Infinity;
-            let bestDir = null;
+                for (const dir of directions) {
+                    if (dir.dx === reverseVx && dir.dy === reverseVy && (this.vx !== 0 || this.vy !== 0)) continue;
 
-            // Ghosts cannot reverse direction unless forced (scared mode transition handles this)
-            const reverseVx = -this.vx;
-            const reverseVy = -this.vy;
+                    const nextCol = currentCol + dir.dx;
+                    const nextRow = currentRow + dir.dy;
 
-            for (const dir of directions) {
-                // Prevent reversing direction
-                if (dir.dx === reverseVx && dir.dy === reverseVy && (this.vx !== 0 || this.vy !== 0)) {
-                    continue;
-                }
+                    const isWall = this.map.isWall(nextCol, nextRow);
+                    const isDoor = this.map.isGhostDoor(nextCol, nextRow);
 
-                const nextCol = currentCol + dir.dx;
-                const nextRow = currentRow + dir.dy;
+                    let canMove = false;
+                    if (!isWall) {
+                         if (!isDoor) canMove = true;
+                         else if (this.mode === 'eaten') canMove = true;
+                    }
 
-                // Check walls. Eaten ghosts can pass the ghost door.
-                const isWall = this.map.isWall(nextCol, nextRow);
-                const isDoor = this.map.isGhostDoor(nextCol, nextRow);
-
-                let canMove = false;
-                if (!isWall) {
-                     if (!isDoor) canMove = true;
-                     else if (this.mode === 'eaten') canMove = true; // Only eaten ghosts can enter door
-                     else if (currentRow >= 13 && currentRow <= 15) canMove = true; // Let them out of house
-                }
-
-                if (canMove) {
-                    // Scared ghosts move randomly at intersections
-                    if (this.mode === 'scared') {
-                        // Just pick any valid direction
-                        bestDir = dir;
-                        // Keep iterating to potentially pick another, effectively randomizing slightly
-                        if (Math.random() > 0.5) break;
-                    } else {
-                        // Calculate Euclidean distance to target
-                        const dist = Math.sqrt(Math.pow(nextCol - target.x, 2) + Math.pow(nextRow - target.y, 2));
-                        if (dist < bestDist) {
-                            bestDist = dist;
+                    if (canMove) {
+                        if (this.mode === 'scared') {
                             bestDir = dir;
+                            if (Math.random() > 0.5) break;
+                        } else {
+                            const dist = Math.sqrt(Math.pow(nextCol - target.x, 2) + Math.pow(nextRow - target.y, 2));
+                            if (dist < bestDist) {
+                                bestDist = dist;
+                                bestDir = dir;
+                            }
                         }
                     }
                 }
-            }
 
-            if (bestDir) {
-                this.vx = bestDir.dx;
-                this.vy = bestDir.dy;
+                if (bestDir) {
+                    this.vx = bestDir.dx;
+                    this.vy = bestDir.dy;
+                    this.targetX = this.x + (this.vx * TILE_SIZE);
+                    this.targetY = this.y + (this.vy * TILE_SIZE);
+                    this.isMovingToTarget = true;
+                }
             }
         }
 
-        // Apply movement
-        this.x += this.vx * this.speed;
-        this.y += this.vy * this.speed;
+        // Apply movement towards target
+        if (this.isMovingToTarget) {
+            const dx = this.targetX - this.x;
+            const dy = this.targetY - this.y;
 
-        // Tunnel handling
-        if (this.x < -TILE_SIZE) {
-            this.x = MAP_WIDTH * TILE_SIZE;
-        } else if (this.x > MAP_WIDTH * TILE_SIZE) {
-            this.x = -TILE_SIZE;
+            const moveX = Math.sign(dx) * Math.min(Math.abs(dx), this.speed);
+            const moveY = Math.sign(dy) * Math.min(Math.abs(dy), this.speed);
+
+            this.x += moveX;
+            this.y += moveY;
+
+            // Cyber Particles
+            if (this.mode !== 'eaten' && Math.random() < 0.1) {
+                createParticle(this.x + TILE_SIZE/2, this.y + TILE_SIZE/2, this.color, 1, 0.2);
+            }
+
+            // Tunnel
+            if (this.x < -TILE_SIZE) {
+                this.x = MAP_WIDTH * TILE_SIZE;
+                this.targetX = this.x;
+            } else if (this.x > MAP_WIDTH * TILE_SIZE) {
+                this.x = -TILE_SIZE;
+                this.targetX = this.x;
+            }
         }
 
-        // Update animation
         this.wobble += this.wobbleSpeed;
     }
 
@@ -293,59 +294,44 @@ class Ghost {
         ctx.save();
         ctx.translate(this.x + TILE_SIZE / 2, this.y + TILE_SIZE / 2);
 
-        // Fallback drawing API (Classic Canvas Look)
         const radius = TILE_SIZE / 2 - 2;
 
         if (this.mode === 'eaten') {
-            // Draw Eyes only
-            ctx.fillStyle = 'white';
-            ctx.beginPath();
-            ctx.arc(-4, -2, 3, 0, Math.PI * 2);
-            ctx.arc(4, -2, 3, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = 'blue';
-            ctx.beginPath();
-            const eyeLookX = this.vx * 1.5;
-            const eyeLookY = this.vy * 1.5;
-            ctx.arc(-4 + eyeLookX, -2 + eyeLookY, 1, 0, Math.PI * 2);
-            ctx.arc(4 + eyeLookX, -2 + eyeLookY, 1, 0, Math.PI * 2);
-            ctx.fill();
+            // Glitched Data Eyes
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = 'blue';
+            ctx.fillStyle = '#0ff';
+            ctx.fillText("01", -8, 4);
             ctx.restore();
             return;
         }
 
-        // Body Color
         let currentColor = this.color;
 
         if (this.mode === 'scared') {
-            // Flash white when timer is running out
-            if (this.scaredTimer < 60 && Math.floor(this.scaredTimer / 10) % 2 === 0) {
-                currentColor = 'white';
-            } else {
-                currentColor = '#0000FF'; // Scared Blue
-            }
+            if (this.scaredTimer < 60 && Math.floor(this.scaredTimer / 10) % 2 === 0) currentColor = '#fff';
+            else currentColor = '#0000FF';
         } else if (this.mode === 'freeze') {
-            currentColor = '#00FFFF'; // Cyan freeze block
+            currentColor = '#00FFFF';
         }
 
-        // Draw Freeze Block
         if (this.mode === 'freeze') {
-             ctx.fillStyle = 'rgba(0, 255, 255, 0.5)'; // Ice cube
+             ctx.fillStyle = 'rgba(0, 255, 255, 0.4)';
+             ctx.strokeStyle = '#0ff';
+             ctx.lineWidth = 1;
+             ctx.strokeRect(-TILE_SIZE/2, -TILE_SIZE/2, TILE_SIZE, TILE_SIZE);
              ctx.fillRect(-TILE_SIZE/2, -TILE_SIZE/2, TILE_SIZE, TILE_SIZE);
         }
 
-        // Draw Ghost Body
+        // Cyber Body (Neon Fill & Stroke)
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = currentColor;
         ctx.fillStyle = currentColor;
+
         ctx.beginPath();
-
-        // Head
         ctx.arc(0, 0, radius, Math.PI, 0);
-
-        // Body and skirt
         ctx.lineTo(radius, radius);
 
-        // Wavy bottom
         const waveHeight = Math.sin(this.wobble) * 2;
         ctx.lineTo(radius / 2, radius - waveHeight);
         ctx.lineTo(0, radius + waveHeight);
@@ -355,15 +341,21 @@ class Ghost {
         ctx.closePath();
         ctx.fill();
 
-        // Eyes (if not scared)
+        // Wireframe stroke overlay
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
         if (this.mode !== 'scared' && this.mode !== 'freeze') {
-            ctx.fillStyle = 'white';
+            // Cyber Eyes
+            ctx.fillStyle = '#000';
             ctx.beginPath();
             ctx.arc(-3, -2, 2.5, 0, Math.PI * 2);
             ctx.arc(3, -2, 2.5, 0, Math.PI * 2);
             ctx.fill();
 
-            ctx.fillStyle = 'blue';
+            ctx.fillStyle = '#f0f'; // Neon magenta pupil
+            ctx.shadowColor = '#f0f';
             ctx.beginPath();
             const eyeLookX = this.vx * 1.5;
             const eyeLookY = this.vy * 1.5;
@@ -371,23 +363,11 @@ class Ghost {
             ctx.arc(3 + eyeLookX, -2 + eyeLookY, 1, 0, Math.PI * 2);
             ctx.fill();
         } else if (this.mode === 'scared') {
-            // Scared Face (Squiggly mouth)
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = '#f00';
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(-4, 4);
-            ctx.lineTo(-2, 2);
-            ctx.lineTo(0, 4);
-            ctx.lineTo(2, 2);
-            ctx.lineTo(4, 4);
+            ctx.moveTo(-4, 4); ctx.lineTo(-2, 2); ctx.lineTo(0, 4); ctx.lineTo(2, 2); ctx.lineTo(4, 4);
             ctx.stroke();
-
-            // Scared Eyes
-            ctx.fillStyle = 'white';
-            ctx.beginPath();
-            ctx.arc(-3, -2, 1, 0, Math.PI * 2);
-            ctx.arc(3, -2, 1, 0, Math.PI * 2);
-            ctx.fill();
         }
 
         ctx.restore();
