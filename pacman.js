@@ -173,34 +173,35 @@ class Pacman {
             this.frame = 1;
         }
 
-        // Handle Eating (Centered Logic)
+        // Handle Eating
         let points = 0;
         let powerEvent = null;
 
-        // Eat when center of Pacman passes center of Tile
-        if (Math.abs(this.x - this.col*TILE_SIZE) < 4 && Math.abs(this.y - this.row*TILE_SIZE) < 4) {
-            const tile = this.map.eatDot(this.col, this.row);
-            if (tile === TILE.DOT) {
-                points = 10;
-            } else if (tile === TILE.POWER_PILL) {
-                points = 50;
-                this.powerMode = true;
-                this.powerTimer = 300; // ~5 seconds at 60fps
-                powerEvent = 'scare';
-            } else if (tile === TILE.POWER_SPEED) {
-                points = 100;
-                this.speedMultiplier = 2; // Double speed
-                this.speedTimer = 300; // 5 seconds
-            } else if (tile === TILE.POWER_FREEZE) {
-                points = 100;
-                powerEvent = 'freeze';
-            } else if (tile === TILE.POWER_SHIELD) {
-                points = 200;
-                this.shieldTimer = 400; // ~6 seconds invincibility
-            } else if (tile === TILE.POWER_BOMB) {
-                points = 500;
-                powerEvent = 'bomb';
-            }
+        // Eat dot anytime we are over the tile, making gameplay feel much faster
+        const eatCol = Math.floor((this.x + TILE_SIZE / 2) / TILE_SIZE);
+        const eatRow = Math.floor((this.y + TILE_SIZE / 2) / TILE_SIZE);
+
+        const tile = this.map.eatDot(eatCol, eatRow);
+        if (tile === TILE.DOT) {
+            points = 10;
+        } else if (tile === TILE.POWER_PILL) {
+            points = 50;
+            this.powerMode = true;
+            this.powerTimer = 300;
+            powerEvent = 'scare';
+        } else if (tile === TILE.POWER_SPEED) {
+            points = 100;
+            this.speedMultiplier = 2;
+            this.speedTimer = 300;
+        } else if (tile === TILE.POWER_FREEZE) {
+            points = 100;
+            powerEvent = 'freeze';
+        } else if (tile === TILE.POWER_SHIELD) {
+            points = 200;
+            this.shieldTimer = 400;
+        } else if (tile === TILE.POWER_BOMB) {
+            points = 500;
+            powerEvent = 'bomb';
         }
 
         // Update Lasers

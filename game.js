@@ -152,11 +152,11 @@ function handleCollisions() {
     });
 }
 
+let flashTimer = 0;
+
 function triggerBomb() {
     // Kills all active ghosts on screen
-    // Flash screen effect
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0,0, canvas.width, canvas.height);
+    flashTimer = 5; // Frames to flash screen white
 
     ghosts.forEach(ghost => {
         if (ghost.mode !== 'eaten') {
@@ -195,9 +195,15 @@ function update() {
 }
 
 function draw() {
-    // Clear screen with slight trail effect (cyberpunk CRT burn-in)
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    // Solid clear for max performance
+    ctx.fillStyle = '#050210';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (flashTimer > 0) {
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        flashTimer--;
+    }
 
     map.draw(ctx);
 
